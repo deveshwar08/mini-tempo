@@ -1,28 +1,42 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+
+	"mini-tempo/pkg/storage"
 )
 
-// WorkflowContext represents the context of a workflow execution.
+// WorkflowContext coordinates deterministic replay
 type WorkflowContext struct {
-	WorkflowID   string
-	RunID        string
-	Namespace    string
-	TaskQueue    string
-	WorkflowType string
-	History      []Event
-	cursor       int
+	InstanceID string
+	store      storage.EventStore
+	history    []storage.Event
+	cursor     int
 }
 
+// NewWorkflowContext initializes a context with a pre-loaded history of events.
+// The Worker is responsible for fetching this history from the database.
+func NewWorkflowContext(instanceID string, store storage.EventStore, history []storage.Event) *WorkflowContext {
+	if len(history) > 0 {
+		log.Printf("♻️ [REHYDRATE] Context initialized with %d events for instance %s", len(history), instanceID)
+	}
 
-// ExecuteActivity executes an activity function and records its result in the workflow history.
-func (ctx *WorkflowContext) ExecuteActivity(name string, fn func() (interface{}, error), target interface{}) error {
+	return &WorkflowContext{
+		InstanceID: instanceID,
+		store:      store,
+		history:    history,
+		cursor:     0,
+	}
+}
+
+// ExecuteActivity runs an activity function or retrieves cached state from history
+func (c *WorkflowContext) ExecuteActivity(ctx context.Context, name string, fn func() (interface{}, error), target interface{}) error {
 	// Replay Check: Determine if this activity was logged in a previous run
-	if ctx.cursor < len(ctx.History) {
-		event := ctx.History[ctx.cursor]
+	if c.cursor < len(c.history) {
+		event := c.history[c.cursor]
 		if event.ActivityName != name || !event.Completed {
 			return fmt.Errorf("non-deterministic replay mismatch: expected %s, got %s", name, event.ActivityName)
 		}
@@ -32,7 +46,7 @@ func (ctx *WorkflowContext) ExecuteActivity(name string, fn func() (interface{},
 				return err
 			}
 		}
-		ctx.cursor++
+		c.cursor++
 		return nil
 	}
 
@@ -48,17 +62,22 @@ func (ctx *WorkflowContext) ExecuteActivity(name string, fn func() (interface{},
 		return err
 	}
 
-	ctx.History = append(ctx.History, Event{
+	event := storage.Event{
+		SequenceNum:  c.cursor,
 		ActivityName: name,
 		Payload:      data,
 		Completed:    true,
-	})
-	ctx.cursor++
+	}
+
+	if err := c.store.AppendEvent(ctx, c.InstanceID, event); err != nil {
+		return fmt.Errorf("failed to persist event: %w", err)
+	}
+
+	c.history = append(c.history, event)
+	c.cursor++
 
 	if target != nil && len(data) > 0 {
 		return json.Unmarshal(data, target)
 	}
 	return nil
 }
-
-

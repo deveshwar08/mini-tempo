@@ -239,10 +239,10 @@ func main() {
   - [x] Monotonic cursor tracking over completed events.
   - [x] In-memory event replay and JSON payload unmarshaling.
   - [x] Validation of non-deterministic branching errors.
-- [ ] **Phase 2: Persistent Storage (WAL)**
-  - [ ] Implement append-only schema in SQLite/PostgreSQL (`workflow_instances`, `workflow_events`).
-  - [ ] Monotonic event sequence IDs and atomic write operations.
-  - [ ] Boot-time workflow rehydration from storage.
+- [x] **Phase 2: Persistent Storage (WAL)**
+  - [x] Implement append-only schema in SQLite/PostgreSQL (`workflow_instances`, `workflow_events`).
+  - [x] Monotonic event sequence IDs and atomic write operations.
+  - [x] Boot-time workflow rehydration from storage.
 - [ ] **Phase 3: Queue & Worker Decoupling**
   - [ ] Split orchestrator into `WorkflowWorker` and `ActivityWorker`.
   - [ ] Activity execution timeouts, heartbeats, and exponential retry policies.

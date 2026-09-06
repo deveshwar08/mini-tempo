@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"time"
 
 	"mini-tempo/pkg/core"
+	"mini-tempo/pkg/storage"
+	"mini-tempo/pkg/worker"
 )
 
 // Activity 1: Simulates external payment gateway
@@ -23,7 +26,7 @@ func ProvisionAccount() (interface{}, error) {
 // Durable Workflow Function
 func UserOnboardingWorkflow(ctx *core.WorkflowContext, simulateCrash bool) error {
 	var txID string
-	if err := ctx.ExecuteActivity("ChargeCard", ChargeCard, &txID); err != nil {
+	if err := ctx.ExecuteActivity(context.Background(), "ChargeCard", ChargeCard, &txID); err != nil {
 		return err
 	}
 	log.Printf("  [STATE] Transaction recorded: %s", txID)
@@ -34,7 +37,7 @@ func UserOnboardingWorkflow(ctx *core.WorkflowContext, simulateCrash bool) error
 	}
 
 	var accID string
-	if err := ctx.ExecuteActivity("ProvisionAccount", ProvisionAccount, &accID); err != nil {
+	if err := ctx.ExecuteActivity(context.Background(), "ProvisionAccount", ProvisionAccount, &accID); err != nil {
 		return err
 	}
 	log.Printf("  [STATE] Account provisioned: %s", accID)
@@ -44,18 +47,24 @@ func UserOnboardingWorkflow(ctx *core.WorkflowContext, simulateCrash bool) error
 }
 
 func main() {
-	var persistentStore []core.Event
+	// Initialize the persistent store (in-memory for this example)
+	store := storage.NewMemoryEventStore()
+	instanceID := "wf_onboarding_123"
+	workflowName := "UserOnboarding"
+	_ = store.CreateInstance(context.Background(), instanceID, workflowName)
+
+	// Create and register the worker
+	w := worker.NewWorker(store)
+	w.RegisterWorkflow(workflowName, UserOnboardingWorkflow)
 
 	log.Println("=== RUN 1: UNHANDLED INTERRUPTION ===")
-	ctx1 := &core.WorkflowContext{History: persistentStore}
-	_ = UserOnboardingWorkflow(ctx1, true)
-
-	// Persist the append-only event log
-	persistentStore = ctx1.History
+	// Start workflow (simulating crash)
+	_ = w.ResumeWorkflow(context.Background(), instanceID, workflowName, true)
 
 	log.Println("=== RUN 2: RESTART & REPLAY FROM LOG ===")
-	ctx2 := &core.WorkflowContext{History: persistentStore}
-	if err := UserOnboardingWorkflow(ctx2, false); err != nil {
+	// In a real system, the process restarts here. The worker picks up the task
+	// and automatically rehydrates history from the store.
+	if err := w.ResumeWorkflow(context.Background(), instanceID, workflowName, false); err != nil {
 		log.Fatalf("Recovery failed: %v", err)
 	}
 }

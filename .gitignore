@@ -1,0 +1,31 @@
+# Binaries
+bin/
+server
+mini-tempo
+
+# OS specific
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go environment
+# Not absolutely necessary as standard Go ignores these, but good to have
+vendor/
+go.work
+go.work.sum
+
+# SQLite databases used for local testing and runs
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Coverage and test profiles
+coverage.out
+coverage.html
+*.prof
+
